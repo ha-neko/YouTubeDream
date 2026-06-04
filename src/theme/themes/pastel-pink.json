@@ -1,20 +1,20 @@
 {
   "id": "pastel-pink",
-  "name": "Soft Pink Rice",
+  "name": "Rosewater Dream",
   "author": "ha-neko",
-  "description": "Warm, soft pastel pink palette — cozy energy",
+  "description": "Lighter, rosier pink tones",
   "colors": {
-    "bg": "#1a1a2e",
-    "bgCard": "#25253e",
-    "bgElevated": "#303050",
-    "text": "#fce4ec",
-    "textSecondary": "#b0a0b0",
-    "accent": "#ff8fab",
-    "accentDim": "#d47a94",
-    "border": "#3a3a5a",
-    "success": "#81c784",
-    "tabBar": "#141428",
-    "tabInactive": "#7a6a7a",
-    "overlay": "rgba(20,20,40,0.8)"
+    "bg": "#232136",
+    "bgCard": "#2a273f",
+    "bgElevated": "#393552",
+    "text": "#e0def4",
+    "textSecondary": "#c4a7e7",
+    "accent": "#ea9a97",
+    "accentDim": "#d7827e",
+    "border": "#555169",
+    "success": "#9ccfd8",
+    "tabBar": "#1f1d2e",
+    "tabInactive": "#6e6a86",
+    "overlay": "rgba(35,33,54,0.85)"
   }
 }

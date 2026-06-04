@@ -3,6 +3,7 @@ import type { Theme } from './types'
 import defaultTheme from './themes/default.json'
 import pastelPink from './themes/pastel-pink.json'
 import synthwave from './themes/synthwave.json'
+import midnight from './themes/midnight.json'
 
 const THEMES_DIR = `${FileSystem.documentDirectory}themes/`
 
@@ -10,6 +11,7 @@ const builtInThemes: Theme[] = [
   defaultTheme as Theme,
   pastelPink as Theme,
   synthwave as Theme,
+  midnight as Theme,
 ]
 
 let cachedThemes: Theme[] | null = null
