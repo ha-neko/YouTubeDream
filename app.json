@@ -14,7 +14,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -27,22 +29,29 @@
     },
     "plugins": [
       "expo-sqlite",
-      ["expo-video", {
-        "supportsPictureInPicture": true
-      }],
-      ["expo-build-properties", {
-        "android": {
-          "minSdkVersion": 24,
-          "compileSdkVersion": 34,
-          "targetSdkVersion": 34
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true
         }
-      }],
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34
+          }
+        }
+      ],
       [
         "expo-av",
         {
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
