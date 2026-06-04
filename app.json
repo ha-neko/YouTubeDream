@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "YouTubeDream",
+    "slug": "youtube-dream",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#0d0d0d",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d0d0d"
+      },
+      "package": "com.youtube.dream",
+      "softwareKeyboardLayoutMode": "pan"
+    },
+    "plugins": [
+      "expo-sqlite",
+      ["expo-video", {
+        "supportsPictureInPicture": true
+      }],
+      ["expo-build-properties", {
+        "android": {
+          "minSdkVersion": 24,
+          "compileSdkVersion": 34,
+          "targetSdkVersion": 34,
+          "manifestQueries": [
+            {
+              "intent": [
+                {
+                  "action": ["android.intent.action.VIEW"],
+                  "data": [{"scheme": "https"}]
+                }
+              ]
+            }
+          ],
+          "extraMavenRepos": []
+        }
+      }],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}
