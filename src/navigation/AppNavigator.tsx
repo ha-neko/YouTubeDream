@@ -2,16 +2,19 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { Ionicons } from '@expo/vector-icons'
-import { theme } from '../theme'
+import { useTheme } from '../theme/ThemeProvider'
 import HomeScreen from '../screens/HomeScreen'
 import MusicScreen from '../screens/MusicScreen'
 import OfflineScreen from '../screens/OfflineScreen'
+import SettingsScreen from '../screens/SettingsScreen'
 import NowPlayingScreen from '../screens/NowPlayingScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function TabNavigator() {
+  const { theme } = useTheme()
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -52,6 +55,15 @@ function TabNavigator() {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cloud-download" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />

@@ -6,10 +6,11 @@ import { search, getStream } from '../services/youtube'
 import type { YouTubeSearchResult } from '../types'
 import SearchBar from '../components/SearchBar'
 import QualityPicker from '../components/QualityPicker'
-import { theme } from '../theme'
+import { useTheme } from '../theme/ThemeProvider'
 import { VideoView, useVideoPlayer } from 'expo-video'
 
 export default function HomeScreen() {
+  const { theme } = useTheme()
   const { searchQuery, setSearchQuery, searchResults, setSearchResults,
     setCurrentStream, currentStream, selectedQuality, setSelectedQuality,
     addToQueue } = useStore()

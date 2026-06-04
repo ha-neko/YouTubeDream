@@ -1,0 +1,20 @@
+{
+  "id": "pastel-pink",
+  "name": "Soft Pink Rice",
+  "author": "ha-neko",
+  "description": "Warm, soft pastel pink palette — cozy energy",
+  "colors": {
+    "bg": "#1a1a2e",
+    "bgCard": "#25253e",
+    "bgElevated": "#303050",
+    "text": "#fce4ec",
+    "textSecondary": "#b0a0b0",
+    "accent": "#ff8fab",
+    "accentDim": "#d47a94",
+    "border": "#3a3a5a",
+    "success": "#81c784",
+    "tabBar": "#141428",
+    "tabInactive": "#7a6a7a",
+    "overlay": "rgba(20,20,40,0.8)"
+  }
+}

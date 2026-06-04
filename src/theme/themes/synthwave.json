@@ -1,0 +1,20 @@
+{
+  "id": "synthwave",
+  "name": "Synthwave '84",
+  "author": "ha-neko",
+  "description": "Retro purple-neon vibes",
+  "colors": {
+    "bg": "#0a0a1a",
+    "bgCard": "#16162e",
+    "bgElevated": "#1e1e3e",
+    "text": "#e0d0ff",
+    "textSecondary": "#9080b0",
+    "accent": "#ff00aa",
+    "accentDim": "#cc0088",
+    "border": "#2a2a4e",
+    "success": "#00ffcc",
+    "tabBar": "#0e0e22",
+    "tabInactive": "#605080",
+    "overlay": "rgba(10,10,30,0.8)"
+  }
+}
