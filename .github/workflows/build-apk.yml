@@ -43,6 +43,11 @@ jobs:
         env:
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
 
+      - name: Pin Gradle version for compatibility
+        run: |
+          sed -i 's|gradle-[0-9]*\.[0-9]*\.[0-9]*|gradle-8.9|' android/gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle version: $(grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties)"
+
       - name: Build debug APK (testing)
         run: |
           cd android
