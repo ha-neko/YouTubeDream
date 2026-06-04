@@ -34,18 +34,7 @@
         "android": {
           "minSdkVersion": 24,
           "compileSdkVersion": 34,
-          "targetSdkVersion": 34,
-          "manifestQueries": [
-            {
-              "intent": [
-                {
-                  "action": ["android.intent.action.VIEW"],
-                  "data": [{"scheme": "https"}]
-                }
-              ]
-            }
-          ],
-          "extraMavenRepos": []
+          "targetSdkVersion": 34
         }
       }],
       [
