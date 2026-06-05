@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native'
+import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator, ScrollView, Dimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
 import { search, getStream, getPlayableStream, getTrending } from '../services/youtube'
@@ -12,11 +12,15 @@ import QualityPicker from '../components/QualityPicker'
 import LyricsOverlay from '../components/LyricsOverlay'
 import { useTheme } from '../theme/ThemeProvider'
 
+const SCREEN_WIDTH = Dimensions.get('window').width
+const SONG_CARD_SIZE = (SCREEN_WIDTH - 48) / 2
+
 export default function MusicScreen({ navigation }: any) {
   const { theme } = useTheme()
   const { searchQuery, setSearchQuery, searchResults, setSearchResults,
     setCurrentStream, currentStream, selectedQuality, setSelectedQuality,
-    addToQueue, showingLyrics, setShowingLyrics } = useStore()
+    addToQueue, queue, queueIndex, playNext, setQueueIndex,
+    showingLyrics, setShowingLyrics } = useStore()
 
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -45,9 +49,44 @@ export default function MusicScreen({ navigation }: any) {
       setTrending(items)
       setTrendingLoading(false)
     })
+
+    // Auto-advance queue when track ends
+    const unsubEnd = audioPlayer.onTrackEnd(async () => {
+      const next = playNext()
+      if (next) {
+        await playQueueItem(next)
+      }
+    })
+
     return () => {
       posUnsub.current?.()
       statusUnsub.current?.()
+      unsubEnd()
+    }
+  }, [])
+
+  const playQueueItem = useCallback(async (item: any) => {
+    setPlayError(null)
+    try {
+      const stream = await getStream(item.id)
+      setCurrentStream(stream)
+      const playable = getPlayableStream(stream)
+      if (!playable?.url) {
+        setPlayError('No stream for queued item')
+        return
+      }
+      setSelectedQuality({ label: playable.label, url: playable.url })
+      await audioPlayer.loadAndPlay(playable.url)
+
+      const found = await searchLyrics(item.title, item.uploader, item.duration)
+      if (found) {
+        const l = await getLyrics(found.id)
+        if (l) setLyrics(l.synced)
+      } else {
+        setLyrics([])
+      }
+    } catch (e: any) {
+      setPlayError(e?.message ?? 'Queue play failed')
     }
   }, [])
 
@@ -117,6 +156,9 @@ export default function MusicScreen({ navigation }: any) {
       } else {
         setLyrics([])
       }
+
+      // Add to queue so auto-advance works
+      setQueueIndex(-1)
     } catch (e: any) {
       setPlayError(e?.message ?? 'Failed to play')
       console.error(e)
@@ -164,6 +206,81 @@ export default function MusicScreen({ navigation }: any) {
     return `${m}:${s.toString().padStart(2, '0')}`
   }
 
+  const renderSongCard = ({ item }: { item: YouTubeSearchResult }) => (
+    <TouchableOpacity
+      onPress={() => handlePlay(item)}
+      style={{
+        flexDirection: 'row', alignItems: 'center', marginBottom: 10,
+        backgroundColor: theme.bgCard, borderRadius: 12, padding: 10,
+      }}
+    >
+      <Image
+        source={{ uri: item.thumbnail }}
+        style={{ width: 52, height: 52, borderRadius: 8, backgroundColor: theme.bgElevated }}
+      />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={{ color: theme.textSecondary, fontSize: 12 }} numberOfLines={1}>
+          {item.uploader}
+        </Text>
+      </View>
+      <TouchableOpacity onPress={() => addToQueue({
+        id: item.id, title: item.title, uploader: item.uploader,
+        thumbnail: item.thumbnail, duration: item.duration,
+      })} style={{ marginHorizontal: 6 }}>
+        <Ionicons name="add-circle-outline" size={22} color={theme.textSecondary} />
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => handleDownload(item)} disabled={downloading === item.id}>
+        <Ionicons
+          name={downloading === item.id ? 'cloud-download-outline' : 'download-outline'}
+          size={22}
+          color={downloading === item.id ? theme.accent : theme.textSecondary}
+        />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  )
+
+  // Horizontal trending strip for YT Music feel
+  const renderTrendingStrip = () => {
+    if (trendingLoading || trending.length === 0) return null
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{
+          color: theme.textSecondary, fontSize: 13, fontWeight: '600',
+          textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10,
+          paddingHorizontal: 16,
+        }}>
+          Trending Songs
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+          {trending.slice(0, 10).map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              onPress={() => handlePlay(item)}
+              style={{ width: SONG_CARD_SIZE }}
+            >
+              <Image
+                source={{ uri: item.thumbnail }}
+                style={{
+                  width: SONG_CARD_SIZE, height: SONG_CARD_SIZE,
+                  borderRadius: 12, backgroundColor: theme.bgElevated,
+                }}
+              />
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600', marginTop: 6 }} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 10 }} numberOfLines={1}>
+                {item.uploader}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    )
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <Header
@@ -193,68 +310,37 @@ export default function MusicScreen({ navigation }: any) {
 
       {loading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
-      ) : (
+      ) : isSearching ? (
         <FlatList
-          data={displayItems}
+          data={searchResults}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 }}
-          onEndReached={isSearching ? loadMore : undefined}
+          onEndReached={loadMore}
           onEndReachedThreshold={0.5}
-          ListHeaderComponent={
-            !isSearching && !trendingLoading && trending.length > 0 ? (
-              <Text style={{
-                color: theme.textSecondary, fontSize: 13, fontWeight: '600',
-                marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
-              }}>
-                Popular Songs
-              </Text>
-            ) : null
-          }
           ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator size="small" color={theme.accent} style={{ paddingVertical: 12 }} />
-            ) : null
+            loadingMore ? <ActivityIndicator size="small" color={theme.accent} style={{ paddingVertical: 12 }} /> : null
           }
           ListEmptyComponent={
-            <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 60 }}>
-              {listEmpty}
-            </Text>
+            <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 60 }}>{listEmpty}</Text>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => handlePlay(item)}
-              style={{
-                flexDirection: 'row', alignItems: 'center', marginBottom: 10,
-                backgroundColor: theme.bgCard, borderRadius: 12, padding: 10,
-              }}
-            >
-              <Image
-                source={{ uri: item.thumbnail }}
-                style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: theme.bgElevated }}
-              />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <Text style={{ color: theme.textSecondary, fontSize: 12 }} numberOfLines={1}>
-                  {item.uploader}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => addToQueue({
-                id: item.id, title: item.title, uploader: item.uploader,
-                thumbnail: item.thumbnail, duration: item.duration,
-              })} style={{ marginHorizontal: 6 }}>
-                <Ionicons name="add-circle-outline" size={22} color={theme.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDownload(item)} disabled={downloading === item.id}>
-                <Ionicons
-                  name={downloading === item.id ? 'cloud-download-outline' : 'download-outline'}
-                  size={22}
-                  color={downloading === item.id ? theme.accent : theme.textSecondary}
-                />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
+          renderItem={renderSongCard}
+        />
+      ) : (
+        <FlatList
+          data={[]}
+          keyExtractor={(_: any, i: number) => String(i)}
+          contentContainerStyle={{ paddingBottom: 140 }}
+          ListHeaderComponent={renderTrendingStrip}
+          ListEmptyComponent={
+            trendingLoading ? (
+              <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
+            ) : (
+              <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>
+                Nothing to show
+              </Text>
+            )
+          }
+          renderItem={() => null}
         />
       )}
 
@@ -277,16 +363,30 @@ export default function MusicScreen({ navigation }: any) {
           }}>
             <Image
               source={{ uri: currentStream.thumbnail }}
-              style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: theme.bg }}
+              style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: theme.bg }}
             />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }} numberOfLines={1}>
                 {currentStream.title}
               </Text>
               <Text style={{ color: theme.textSecondary, fontSize: 10 }}>
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {queueIndex >= 0 && queue[queueIndex]
+                  ? `Queue ${queueIndex + 1}/${queue.length}`
+                  : `${formatTime(currentTime)} / ${formatTime(duration)}`
+                }
               </Text>
             </View>
+
+            {/* Skip back */}
+            <TouchableOpacity
+              onPress={async () => {
+                const prev = useStore.getState().playPrevious()
+                if (prev) await playQueueItem(prev)
+              }}
+              style={{ marginHorizontal: 4 }}
+            >
+              <Ionicons name="play-skip-back" size={22} color={theme.text} />
+            </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => audioPlayer.toggle()}
@@ -296,6 +396,17 @@ export default function MusicScreen({ navigation }: any) {
                 name={playState === 'playing' ? 'pause' : 'play'}
                 size={18} color="#fff"
               />
+            </TouchableOpacity>
+
+            {/* Skip forward */}
+            <TouchableOpacity
+              onPress={async () => {
+                const next = playNext()
+                if (next) await playQueueItem(next)
+              }}
+              style={{ marginHorizontal: 4 }}
+            >
+              <Ionicons name="play-skip-forward" size={22} color={theme.text} />
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setShowingLyrics(true)} style={{ marginHorizontal: 6 }}>

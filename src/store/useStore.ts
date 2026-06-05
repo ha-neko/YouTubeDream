@@ -34,6 +34,8 @@ interface StoreState {
   addToQueue: (item: QueueItem) => void
   removeFromQueue: (id: string) => void
   setQueueIndex: (index: number) => void
+  playNext: () => QueueItem | null
+  playPrevious: () => QueueItem | null
   setIsPlaying: (playing: boolean) => void
   setIsOfflineMode: (offline: boolean) => void
   setDownloadedItems: (items: DownloadedItem[]) => void
@@ -64,6 +66,30 @@ export const useStore = create<StoreState>((set) => ({
   addToQueue: (item) => set((s) => ({ queue: [...s.queue, item] })),
   removeFromQueue: (id) => set((s) => ({ queue: s.queue.filter((q) => q.id !== id) })),
   setQueueIndex: (queueIndex) => set({ queueIndex }),
+  playNext: () => {
+    let next: QueueItem | null = null
+    set((s) => {
+      const i = s.queueIndex + 1
+      if (i < s.queue.length) {
+        next = s.queue[i]
+        return { queueIndex: i }
+      }
+      return {}
+    })
+    return next
+  },
+  playPrevious: () => {
+    let prev: QueueItem | null = null
+    set((s) => {
+      const i = s.queueIndex - 1
+      if (i >= 0) {
+        prev = s.queue[i]
+        return { queueIndex: i }
+      }
+      return {}
+    })
+    return prev
+  },
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setIsOfflineMode: (isOfflineMode) => set({ isOfflineMode }),
   setDownloadedItems: (downloadedItems) => set({ downloadedItems }),

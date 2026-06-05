@@ -1,16 +1,17 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av'
-import type { LyricLine } from '../types'
 
 type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error'
 
 type StatusListener = (status: PlaybackStatus) => void
 type PositionListener = (positionMs: number, durationMs: number) => void
 type ErrorListener = (error: string) => void
+type TrackEndListener = () => void
 
 let sound: Audio.Sound | null = null
 let statusListeners = new Set<StatusListener>()
 let positionListeners = new Set<PositionListener>()
 let errorListeners = new Set<ErrorListener>()
+let trackEndListeners = new Set<TrackEndListener>()
 let playbackStatus: PlaybackStatus = 'idle'
 let positionInterval: ReturnType<typeof setInterval> | null = null
 let _durationMs = 0
@@ -28,6 +29,11 @@ export function onPosition(cb: PositionListener) {
 export function onError(cb: ErrorListener) {
   errorListeners.add(cb)
   return () => errorListeners.delete(cb)
+}
+
+export function onTrackEnd(cb: TrackEndListener) {
+  trackEndListeners.add(cb)
+  return () => trackEndListeners.delete(cb)
 }
 
 function setStatus(s: PlaybackStatus) {
@@ -128,6 +134,7 @@ function onPlaybackUpdate(status: any) {
   if (status.didJustFinish) {
     setStatus('ended')
     stopPositionInterval()
+    trackEndListeners.forEach(l => l())
   }
 
   if (status.isPlaying) {

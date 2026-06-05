@@ -26,7 +26,7 @@ export default function Header({
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: subtitle ? 2 : 10 }}>
         <Image
           source={require('../../assets/icon.png')}
-          style={{ width: 34, height: 34, borderRadius: 9, marginRight: 10, backgroundColor: theme.bgElevated }}
+          style={{ width: 42, height: 42, borderRadius: 11, marginRight: 10, backgroundColor: theme.bgElevated }}
         />
         <Text style={{
           color: theme.text, fontSize: 22, fontWeight: '800',

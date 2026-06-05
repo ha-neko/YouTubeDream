@@ -1,19 +1,30 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native'
+import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator, Dimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
 import { search, getStream, getTrending } from '../services/youtube'
+import * as audioPlayer from '../services/audioPlayer'
 import type { YouTubeSearchResult } from '../types'
 import Header from '../components/Header'
 import QualityPicker from '../components/QualityPicker'
 import { useTheme } from '../theme/ThemeProvider'
 import { VideoView, useVideoPlayer } from 'expo-video'
 
+const SCREEN_WIDTH = Dimensions.get('window').width
+const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2
+
+function formatViews(n: number): string {
+  if (!n) return ''
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
+}
+
 export default function HomeScreen({ navigation }: any) {
   const { theme } = useTheme()
   const { searchQuery, setSearchQuery, searchResults, setSearchResults,
     setCurrentStream, currentStream, selectedQuality, setSelectedQuality,
-    addToQueue } = useStore()
+    addToQueue, queue, playNext } = useStore()
 
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -25,9 +36,7 @@ export default function HomeScreen({ navigation }: any) {
   const nextPageRef = useRef<string | null>(null)
   const queryRef = useRef('')
 
-  const player = useVideoPlayer(null, (p) => {
-    p.staysActiveInBackground = true
-  })
+  const player = useVideoPlayer(null)
 
   useEffect(() => {
     if (selectedQuality?.url && player) {
@@ -113,6 +122,45 @@ export default function HomeScreen({ navigation }: any) {
     ? 'No results found'
     : (trendingLoading ? 'Loading...' : 'Nothing to show')
 
+  const renderVideoCard = ({ item }: { item: YouTubeSearchResult }) => (
+    <TouchableOpacity
+      onPress={() => handlePlay(item)}
+      style={{
+        width: CARD_WIDTH,
+        marginBottom: 14,
+        backgroundColor: theme.bgCard,
+        borderRadius: 12,
+        overflow: 'hidden',
+      }}
+    >
+      <Image
+        source={{ uri: item.thumbnail }}
+        style={{ width: '100%', height: CARD_WIDTH * 0.56, backgroundColor: theme.bgElevated }}
+      />
+      <View style={{ padding: 10 }}>
+        <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 4 }}>
+          {item.uploader}
+        </Text>
+        {item.views != null && (
+          <Text style={{ color: theme.textSecondary, fontSize: 10, marginTop: 2 }}>
+            {formatViews(item.views)} views
+          </Text>
+        )}
+        <View style={{ flexDirection: 'row', marginTop: 6, gap: 8 }}>
+          <TouchableOpacity onPress={() => addToQueue({
+            id: item.id, title: item.title, uploader: item.uploader,
+            thumbnail: item.thumbnail, duration: item.duration,
+          })}>
+            <Ionicons name="add-circle-outline" size={18} color={theme.accent} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <Header
@@ -135,7 +183,7 @@ export default function HomeScreen({ navigation }: any) {
       )}
 
       {currentStream && selectedQuality?.url ? (
-        <TouchableOpacity activeOpacity={1} style={{ height: 240, backgroundColor: '#000' }}>
+        <View style={{ height: 240, backgroundColor: '#000' }}>
           <VideoView
             player={player}
             style={{ flex: 1 }}
@@ -143,7 +191,7 @@ export default function HomeScreen({ navigation }: any) {
             allowsPictureInPicture
             contentFit="contain"
           />
-        </TouchableOpacity>
+        </View>
       ) : null}
 
       {playError && (
@@ -158,17 +206,21 @@ export default function HomeScreen({ navigation }: any) {
         <FlatList
           data={displayItems}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
           onEndReached={isSearching ? loadMore : undefined}
           onEndReachedThreshold={0.5}
           ListHeaderComponent={
             !isSearching && !trendingLoading && trending.length > 0 ? (
-              <Text style={{
-                color: theme.textSecondary, fontSize: 13, fontWeight: '600',
-                marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
-              }}>
-                Trending Now
-              </Text>
+              <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+                <Text style={{
+                  color: theme.textSecondary, fontSize: 13, fontWeight: '600',
+                  textTransform: 'uppercase', letterSpacing: 1,
+                }}>
+                  Trending Now
+                </Text>
+              </View>
             ) : null
           }
           ListFooterComponent={
@@ -181,36 +233,7 @@ export default function HomeScreen({ navigation }: any) {
               {listEmpty}
             </Text>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => handlePlay(item)}
-              style={{
-                flexDirection: 'row', marginBottom: 12,
-                backgroundColor: theme.bgCard, borderRadius: 12, overflow: 'hidden',
-              }}
-            >
-              <Image
-                source={{ uri: item.thumbnail }}
-                style={{ width: 140, height: 80, backgroundColor: theme.bgElevated }}
-              />
-              <View style={{ flex: 1, padding: 10, justifyContent: 'center' }}>
-                <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 4 }}>
-                  {item.uploader}
-                </Text>
-                <View style={{ flexDirection: 'row', marginTop: 6 }}>
-                  <TouchableOpacity onPress={() => addToQueue({
-                    id: item.id, title: item.title, uploader: item.uploader,
-                    thumbnail: item.thumbnail, duration: item.duration,
-                  })}>
-                    <Ionicons name="add-circle-outline" size={20} color={theme.accent} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={renderVideoCard}
         />
       )}
 

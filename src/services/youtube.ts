@@ -1,18 +1,34 @@
 import { Platform } from 'react-native'
 import type { YouTubeSearchResult, YouTubeStream, StreamQuality } from '../types'
 
-const PIPED_API = 'https://api.piped.private.coffee'
-const CORS_PROXY = 'https://api.codetabs.com/v1/proxy?quest='
+const PIPED_INSTANCES = [
+  'https://api.piped.private.coffee',
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.leptons.xyz',
+  'https://pipedapi.nosebs.ru',
+  'https://pipedapi-libre.kavin.rocks',
+  'https://api.piped.yt',
+  'https://piped-api.privacy.com.de',
+  'https://pipedapi.adminforge.de',
+  'https://pipedapi.drgns.space',
+  'https://pipedapi.owo.si',
+  'https://pipedapi.ducks.party',
+  'https://pipedapi.reallyaweso.me',
+  'https://api.piped.private.coffee',
+  'https://pipedapi.darkness.services',
+  'https://pipedapi.orangenet.cc',
+]
 
+const CORS_PROXY = 'https://api.codetabs.com/v1/proxy?quest='
 const isWeb = Platform.OS === 'web'
 
-function apiUrl(path: string): string {
-  const url = `${PIPED_API}${path}`
+function apiUrl(instance: string, path: string): string {
+  const url = `${instance}${path}`
   return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
 }
 
 function fixThumbnail(url: string, videoId: string): string {
-  if (url.includes('proxy.piped') || url.includes('i.ytimg.com')) {
+  if (url.includes('proxy.piped') || url.includes('i.ytimg.com') || url.includes('ytimg.com')) {
     return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
   }
   return url
@@ -32,13 +48,24 @@ function resultFromItem(item: any): YouTubeSearchResult | null {
   }
 }
 
+async function fetchFromInstances<T>(path: string, extract: (data: any) => T): Promise<T> {
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const res = await fetch(apiUrl(instance, path), { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const data = await res.json()
+      if (data && !data.error) return extract(data)
+    } catch { }
+  }
+  throw new Error('All instances failed')
+}
+
 export async function getTrending(): Promise<YouTubeSearchResult[]> {
   try {
-    const res = await fetch(apiUrl('/trending?region=US'))
-    if (!res.ok) return []
-    const data = await res.json()
-    const items = Array.isArray(data) ? data : data.items ?? []
-    return items.map(resultFromItem).filter(Boolean) as YouTubeSearchResult[]
+    return await fetchFromInstances('/trending?region=US', (data) => {
+      const items = Array.isArray(data) ? data : data.items ?? []
+      return items.map(resultFromItem).filter(Boolean) as YouTubeSearchResult[]
+    })
   } catch {
     return []
   }
@@ -50,57 +77,49 @@ export async function search(
 ): Promise<{ results: YouTubeSearchResult[]; nextpage: string | null }> {
   const params = new URLSearchParams({ q: query, filter: 'videos' })
   if (nextpage) params.set('nextpage', nextpage)
-  const res = await fetch(apiUrl(`/search?${params}`))
-  if (!res.ok) throw new Error(`Search failed: ${res.status}`)
-  const data = await res.json()
-  return {
+
+  return await fetchFromInstances(`/search?${params}`, (data) => ({
     results: (data.items ?? []).map(resultFromItem).filter(Boolean) as YouTubeSearchResult[],
     nextpage: data.nextpage ?? null,
-  }
+  }))
 }
 
 export async function getStream(videoId: string): Promise<YouTubeStream> {
-  const res = await fetch(apiUrl(`/streams/${videoId}`))
-  if (!res.ok) throw new Error(`Stream fetch failed: ${res.status}`)
-  const data = await res.json()
+  return await fetchFromInstances(`/streams/${videoId}`, (data) => {
+    const videoStreams: StreamQuality[] = (data.videoStreams ?? []).map((s: any) => ({
+      label: s.quality && !s.quality.includes('LBRY')
+        ? `${s.quality}${s.videoOnly ? ' (video only)' : ''}`
+        : s.label ?? s.quality ?? 'Unknown',
+      itag: s.itag,
+      url: s.url,
+      mimeType: s.mimeType,
+      width: s.width,
+      height: s.height,
+      contentLength: s.contentLength,
+      videoOnly: s.videoOnly,
+    }))
 
-  if (data.error) {
-    throw new Error(data.message ?? data.error ?? 'Stream not available')
-  }
+    const audioStreams: StreamQuality[] = (data.audioStreams ?? []).map((s: any) => ({
+      label: `${s.bitrate ? Math.round(s.bitrate / 1000) + 'kbps' : 'Unknown'} ${s.mimeType ?? ''}`,
+      itag: s.itag,
+      url: s.url,
+      mimeType: s.mimeType,
+      bitrate: s.bitrate,
+      contentLength: s.contentLength,
+    }))
 
-  const videoStreams: StreamQuality[] = (data.videoStreams ?? []).map((s: any) => ({
-    label: s.quality && !s.quality.includes('LBRY')
-      ? `${s.quality}${s.videoOnly ? ' (video only)' : ''}`
-      : s.label ?? s.quality ?? 'Unknown',
-    itag: s.itag,
-    url: s.url,
-    mimeType: s.mimeType,
-    width: s.width,
-    height: s.height,
-    contentLength: s.contentLength,
-    videoOnly: s.videoOnly,
-  }))
-
-  const audioStreams: StreamQuality[] = (data.audioStreams ?? []).map((s: any) => ({
-    label: `${s.bitrate ? Math.round(s.bitrate / 1000) + 'kbps' : 'Unknown'} ${s.mimeType ?? ''}`,
-    itag: s.itag,
-    url: s.url,
-    mimeType: s.mimeType,
-    bitrate: s.bitrate,
-    contentLength: s.contentLength,
-  }))
-
-  return {
-    id: videoId,
-    title: data.title ?? 'Untitled',
-    thumbnail: data.thumbnailUrl ?? data.thumbnail ?? '',
-    duration: data.duration ?? 0,
-    uploader: data.uploader ?? 'Unknown',
-    uploaderAvatar: data.uploaderAvatar ?? '',
-    description: data.description ?? '',
-    videoStreams,
-    audioStreams,
-  }
+    return {
+      id: videoId,
+      title: data.title ?? 'Untitled',
+      thumbnail: data.thumbnailUrl ?? data.thumbnail ?? '',
+      duration: data.duration ?? 0,
+      uploader: data.uploader ?? 'Unknown',
+      uploaderAvatar: data.uploaderAvatar ?? '',
+      description: data.description ?? '',
+      videoStreams,
+      audioStreams,
+    }
+  })
 }
 
 export function getPlayableStream(stream: YouTubeStream): { url: string; label: string } | null {
@@ -120,12 +139,13 @@ export function getPlayableStream(stream: YouTubeStream): { url: string; label: 
 }
 
 export async function getAutocomplete(query: string): Promise<string[]> {
-  try {
-    const params = new URLSearchParams({ query })
-    const res = await fetch(apiUrl(`/opensearch/suggestions?${params}`))
-    if (!res.ok) return []
-    return await res.json()
-  } catch {
-    return []
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const params = new URLSearchParams({ query })
+      const res = await fetch(apiUrl(instance, `/opensearch/suggestions?${params}`), { signal: AbortSignal.timeout(5000) })
+      if (!res.ok) continue
+      return await res.json()
+    } catch { }
   }
+  return []
 }
