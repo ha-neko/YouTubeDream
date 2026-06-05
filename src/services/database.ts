@@ -1,37 +1,64 @@
-import * as SQLite from 'expo-sqlite'
+import { Platform } from 'react-native'
 import type { DownloadedItem } from '../types'
 
-let db: SQLite.SQLiteDatabase | null = null
+const isWeb = Platform.OS === 'web'
 
-async function getDb() {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync('youtube-dream.db')
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS downloads (
-        id TEXT PRIMARY KEY,
-        youtube_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        uploader TEXT NOT NULL,
-        thumbnail TEXT NOT NULL,
-        duration REAL NOT NULL DEFAULT 0,
-        file_path TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('audio','video')),
-        quality TEXT NOT NULL,
-        added_at INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS playlists (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        items TEXT NOT NULL DEFAULT '[]',
-        created_at INTEGER NOT NULL
-      );
-    `)
+let SQLite: any = null
+try {
+  SQLite = require('expo-sqlite')
+} catch {}
+
+function webStorage() {
+  const KEY = 'ytdream_downloads'
+  return {
+    getAll: (): DownloadedItem[] => {
+      try { return JSON.parse(localStorage.getItem(KEY) || '[]') } catch { return [] }
+    },
+    save: (items: DownloadedItem[]) => {
+      localStorage.setItem(KEY, JSON.stringify(items))
+    },
   }
-  return db
+}
+
+let nativeDb: any = null
+
+async function getNativeDb() {
+  if (nativeDb) return nativeDb
+  nativeDb = await SQLite.openDatabaseAsync('youtube-dream.db')
+  await nativeDb.execAsync(`
+    CREATE TABLE IF NOT EXISTS downloads (
+      id TEXT PRIMARY KEY,
+      youtube_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      uploader TEXT NOT NULL,
+      thumbnail TEXT NOT NULL,
+      duration REAL NOT NULL DEFAULT 0,
+      file_path TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('audio','video')),
+      quality TEXT NOT NULL,
+      added_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS playlists (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      items TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL
+    );
+  `)
+  return nativeDb
 }
 
 export async function insertDownload(item: DownloadedItem): Promise<void> {
-  const d = await getDb()
+  if (isWeb || !SQLite) {
+    const store = webStorage()
+    const items = store.getAll()
+    const idx = items.findIndex(i => i.id === item.id)
+    if (idx >= 0) items[idx] = item
+    else items.unshift(item)
+    store.save(items)
+    return
+  }
+  const d = await getNativeDb()
   await d.runAsync(
     `INSERT OR REPLACE INTO downloads (id, youtube_id, title, uploader, thumbnail, duration, file_path, type, quality, added_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -41,37 +68,40 @@ export async function insertDownload(item: DownloadedItem): Promise<void> {
 }
 
 export async function getDownloads(): Promise<DownloadedItem[]> {
-  const d = await getDb()
-  const rows = await d.getAllAsync<Record<string, unknown>>(
+  if (isWeb || !SQLite) return webStorage().getAll()
+  const d = await getNativeDb()
+  const rows = await d.getAllAsync(
     'SELECT * FROM downloads ORDER BY added_at DESC'
   )
-  return rows.map(mapRow)
+  return (rows as any[]).map(mapRow)
 }
 
 export async function removeDownload(id: string): Promise<void> {
-  const d = await getDb()
+  if (isWeb || !SQLite) {
+    const store = webStorage()
+    store.save(store.getAll().filter(i => i.id !== id))
+    return
+  }
+  const d = await getNativeDb()
   await d.runAsync('DELETE FROM downloads WHERE id = ?', id)
 }
 
 export async function getDownloadByYoutubeId(youtubeId: string): Promise<DownloadedItem | null> {
-  const d = await getDb()
-  const row = await d.getFirstAsync<Record<string, unknown>>(
-    'SELECT * FROM downloads WHERE youtube_id = ?', youtubeId
-  )
-  return row ? mapRow(row) : null
+  const items = await getDownloads()
+  return items.find(i => i.youtubeId === youtubeId) ?? null
 }
 
-function mapRow(row: Record<string, unknown>): DownloadedItem {
+function mapRow(row: any): DownloadedItem {
   return {
-    id: row.id as string,
-    youtubeId: row.youtube_id as string,
-    title: row.title as string,
-    uploader: row.uploader as string,
-    thumbnail: row.thumbnail as string,
-    duration: row.duration as number,
-    filePath: row.file_path as string,
-    type: row.type as 'audio' | 'video',
-    quality: row.quality as string,
-    addedAt: row.added_at as number,
+    id: row.id,
+    youtubeId: row.youtube_id,
+    title: row.title,
+    uploader: row.uploader,
+    thumbnail: row.thumbnail,
+    duration: row.duration,
+    filePath: row.file_path,
+    type: row.type,
+    quality: row.quality,
+    addedAt: row.added_at,
   }
 }
