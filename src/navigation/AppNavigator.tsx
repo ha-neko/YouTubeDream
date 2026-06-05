@@ -8,6 +8,7 @@ import MusicScreen from '../screens/MusicScreen'
 import OfflineScreen from '../screens/OfflineScreen'
 import SettingsScreen from '../screens/SettingsScreen'
 import NowPlayingScreen from '../screens/NowPlayingScreen'
+import LoginScreen from '../screens/LoginScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -79,6 +80,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="NowPlaying"
           component={NowPlayingScreen}
+          options={{ presentation: 'modal' }}
+        />
+        <Stack.Screen
+          name="Profiles"
+          component={LoginScreen}
           options={{ presentation: 'modal' }}
         />
       </Stack.Navigator>

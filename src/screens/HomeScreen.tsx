@@ -36,12 +36,11 @@ export default function HomeScreen({ navigation }: any) {
   const nextPageRef = useRef<string | null>(null)
   const queryRef = useRef('')
 
-  const player = useVideoPlayer(null)
+  const player = useVideoPlayer(selectedQuality?.url ?? null)
 
   useEffect(() => {
     if (selectedQuality?.url && player) {
-      player.replace(selectedQuality.url)
-      player.play()
+      try { player.play() } catch {}
       setPlayError(null)
     }
   }, [selectedQuality?.url])
@@ -185,6 +184,7 @@ export default function HomeScreen({ navigation }: any) {
       {currentStream && selectedQuality?.url ? (
         <View style={{ height: 240, backgroundColor: '#000' }}>
           <VideoView
+            key={selectedQuality?.url ?? 'empty'}
             player={player}
             style={{ flex: 1 }}
             nativeControls

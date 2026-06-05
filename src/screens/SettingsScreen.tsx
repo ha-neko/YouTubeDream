@@ -1,11 +1,18 @@
+import { useState, useEffect } from 'react'
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../theme/ThemeProvider'
 import Header from '../components/Header'
+import * as profiles from '../services/profiles'
 import type { Theme } from '../theme/types'
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }: any) {
   const { theme, fullTheme, setTheme, availableThemes } = useTheme()
+  const [activeProfile, setActiveProfile] = useState<any>(null)
+
+  useEffect(() => {
+    setActiveProfile(profiles.getActiveProfile())
+  }, [])
 
   const handleSelect = (t: Theme) => setTheme(t)
 
@@ -14,9 +21,48 @@ export default function SettingsScreen() {
       <Header subtitle="Customize your experience" />
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
+        {/* Profile */}
         <Text style={{
           color: theme.textSecondary, fontSize: 12, fontWeight: '700',
           textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8,
+        }}>
+          Profile
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Profiles')}
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: theme.bgCard, borderRadius: 12, padding: 14, marginBottom: 8,
+          }}
+        >
+          <View style={{
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: activeProfile ? theme.accent : theme.bgElevated,
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
+              {activeProfile?.avatar ?? '?'}
+            </Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>
+              {activeProfile?.name ?? 'No profile'}
+            </Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+              {activeProfile
+                ? `${activeProfile.subscriptions.length} subs · ${activeProfile.history.length} watched`
+                : 'Create a profile to save history'
+              }
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
+
+        {/* Themes section */}
+        <Text style={{
+          color: theme.textSecondary, fontSize: 12, fontWeight: '700',
+          textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 24,
         }}>
           Themes
         </Text>
@@ -73,7 +119,8 @@ export default function SettingsScreen() {
 
         <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
           <Text style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>
-            Want more themes? Create a JSON file with color tokens and place it in the app's themes folder, or share themes with the community by opening a PR.
+            Want more themes? Create a JSON file with color tokens and place it in the app's themes folder.
+            Profiles, history, and subscriptions are stored locally on your device.
           </Text>
         </View>
       </ScrollView>
