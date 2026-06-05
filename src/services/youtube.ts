@@ -1,16 +1,14 @@
 import { Platform } from 'react-native'
 import type { YouTubeSearchResult, YouTubeStream, StreamQuality } from '../types'
 
-const PIPED_API = 'https://pipedapi.kavin.rocks'
+const PIPED_API = 'https://api.piped.private.coffee'
+const DEV_PROXY = 'http://localhost:3333'
 
-// Free public CORS proxy for web (browsers block cross-origin)
-const CORS_PROXY = 'https://api.allorigins.win/raw?url='
-
+// On web, use a local proxy to avoid CORS (browsers block cross-origin)
 const isWeb = Platform.OS === 'web'
 
 function apiUrl(path: string): string {
-  const url = `${PIPED_API}${path}`
-  return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
+  return isWeb ? `${DEV_PROXY}${path}` : `${PIPED_API}${path}`
 }
 
 export async function search(query: string): Promise<YouTubeSearchResult[]> {

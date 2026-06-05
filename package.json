@@ -5,7 +5,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "ios": "expo start --ios"
+    "ios": "expo start --ios",
+    "proxy": "node scripts/proxy.js",
+    "web": "node scripts/proxy.js & sleep 2 && npx expo start --web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
