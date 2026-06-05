@@ -9,6 +9,7 @@ export interface StreamQuality {
   width?: number
   height?: number
   contentLength?: string
+  videoOnly?: boolean
 }
 
 export interface YouTubeSearchResult {

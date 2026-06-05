@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../theme/ThemeProvider'
+import Header from '../components/Header'
 import type { Theme } from '../theme/types'
 
 export default function SettingsScreen() {
@@ -10,17 +11,9 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12 }}>
-        <Text style={{ color: theme.text, fontSize: 26, fontWeight: '800', marginBottom: 4 }}>
-          ⚙ Settings
-        </Text>
-        <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-          Customize your experience
-        </Text>
-      </View>
+      <Header subtitle="Customize your experience" />
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
-        {/* Themes section */}
         <Text style={{
           color: theme.textSecondary, fontSize: 12, fontWeight: '700',
           textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8,
@@ -47,7 +40,6 @@ export default function SettingsScreen() {
                   borderWidth: 2, borderColor: isActive ? theme.accent : 'transparent',
                 }}
               >
-                {/* Color preview */}
                 <View style={{
                   width: 44, height: 44, borderRadius: 10,
                   backgroundColor: c.bg, overflow: 'hidden',
@@ -63,9 +55,7 @@ export default function SettingsScreen() {
                 </View>
 
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={{
-                    color: theme.text, fontWeight: '600', fontSize: 14,
-                  }}>
+                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }}>
                     {t.name}
                   </Text>
                   <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
@@ -81,7 +71,6 @@ export default function SettingsScreen() {
           })
         )}
 
-        {/* Info */}
         <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
           <Text style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>
             Want more themes? Create a JSON file with color tokens and place it in the app's themes folder, or share themes with the community by opening a PR.

@@ -2,20 +2,21 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
-import { search, getStream } from '../services/youtube'
+import { search, getStream, getPlayableStream, getTrending } from '../services/youtube'
 import { searchLyrics, getLyrics } from '../services/lyrics'
 import { startDownload } from '../services/downloader'
 import * as audioPlayer from '../services/audioPlayer'
 import type { YouTubeSearchResult, LyricLine } from '../types'
-import SearchBar from '../components/SearchBar'
+import Header from '../components/Header'
 import QualityPicker from '../components/QualityPicker'
 import LyricsOverlay from '../components/LyricsOverlay'
-import { theme } from '../theme'
+import { useTheme } from '../theme/ThemeProvider'
 
-export default function MusicScreen() {
+export default function MusicScreen({ navigation }: any) {
+  const { theme } = useTheme()
   const { searchQuery, setSearchQuery, searchResults, setSearchResults,
     setCurrentStream, currentStream, selectedQuality, setSelectedQuality,
-    addToQueue, queue, showingLyrics, setShowingLyrics } = useStore()
+    addToQueue, showingLyrics, setShowingLyrics } = useStore()
 
   const [loading, setLoading] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
@@ -24,7 +25,9 @@ export default function MusicScreen() {
   const [duration, setDuration] = useState(0)
   const [playState, setPlayState] = useState<string>('idle')
   const [downloading, setDownloading] = useState<string | null>(null)
-  const [offlineUri, setOfflineUri] = useState<string | null>(null)
+  const [trending, setTrending] = useState<YouTubeSearchResult[]>([])
+  const [trendingLoading, setTrendingLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
   const posUnsub = useRef<(() => void) | null>(null)
   const statusUnsub = useRef<(() => void) | null>(null)
 
@@ -34,6 +37,10 @@ export default function MusicScreen() {
       setDuration(durMs / 1000)
     })
     statusUnsub.current = audioPlayer.onStatusChange((s) => setPlayState(s))
+    getTrending().then((items) => {
+      setTrending(items)
+      setTrendingLoading(false)
+    })
     return () => {
       posUnsub.current?.()
       statusUnsub.current?.()
@@ -41,8 +48,12 @@ export default function MusicScreen() {
   }, [])
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return
+    if (!searchQuery.trim()) {
+      setIsSearching(false)
+      return
+    }
     setLoading(true)
+    setIsSearching(true)
     try {
       const results = await search(searchQuery.trim())
       setSearchResults(results)
@@ -53,26 +64,28 @@ export default function MusicScreen() {
     }
   }, [searchQuery])
 
-  const handlePlay = useCallback(async (result: YouTubeSearchResult, playUri?: string) => {
+  const clearSearch = useCallback(() => {
+    setSearchQuery('')
+    setSearchResults([])
+    setIsSearching(false)
+  }, [])
+
+  const handlePlay = useCallback(async (result: YouTubeSearchResult) => {
     try {
-      const stream = playUri ? currentStream : await getStream(result.id)
-      if (!playUri) {
-        const s = await getStream(result.id)
-        setCurrentStream(s)
-        const audio = s.audioStreams?.[0]
-        if (audio) setSelectedQuality(audio)
-      }
+      const stream = await getStream(result.id)
+      setCurrentStream(stream)
 
-      const audioUrl = playUri ?? selectedQuality?.url
-      if (!audioUrl) return
+      const playable = getPlayableStream(stream)
+      if (!playable?.url) return
 
-      await audioPlayer.loadAndPlay(audioUrl)
+      setSelectedQuality({
+        label: playable.label,
+        url: playable.url,
+      })
 
-      const trackTitle = result.title
-      const trackUploader = result.uploader ?? currentStream?.uploader ?? ''
-      const trackDuration = result.duration ?? currentStream?.duration ?? 0
+      await audioPlayer.loadAndPlay(playable.url)
 
-      const found = await searchLyrics(trackTitle, trackUploader, trackDuration)
+      const found = await searchLyrics(result.title, result.uploader, result.duration)
       if (found) {
         const l = await getLyrics(found.id)
         if (l) setLyrics(l.synced)
@@ -82,61 +95,40 @@ export default function MusicScreen() {
     } catch (e) {
       console.error(e)
     }
-  }, [currentStream, selectedQuality])
-
-  const handlePlayDownloaded = useCallback(async (item: any) => {
-    setCurrentStream({
-      id: item.youtubeId,
-      title: item.title,
-      thumbnail: item.thumbnail,
-      duration: item.duration,
-      uploader: item.uploader,
-      videoStreams: [],
-      audioStreams: [{ label: item.quality, url: item.filePath } as any],
-    })
-    setOfflineUri(item.filePath)
-    await audioPlayer.loadAndPlay(item.filePath)
-
-    const found = await searchLyrics(item.title, item.uploader, item.duration)
-    if (found) {
-      const l = await getLyrics(found.id)
-      if (l) setLyrics(l.synced)
-    } else {
-      setLyrics([])
-    }
   }, [])
 
   const handleDownload = useCallback(async (result: YouTubeSearchResult) => {
-    if (!currentStream || currentStream.id !== result.id) {
-      const stream = await getStream(result.id)
-      setCurrentStream(stream)
-      const audio = stream.audioStreams?.[0]
-      if (audio) setSelectedQuality(audio)
-    }
-    const stream = currentStream?.id === result.id ? currentStream : await getStream(result.id)
-    const audio = stream.audioStreams?.[0]
-    if (!audio?.url) return
-
-    setDownloading(result.id)
     try {
-      await startDownload(
-        result.id, result.title, result.uploader,
-        result.thumbnail, result.duration,
-        audio.url, audio.label, 'audio'
-      )
+      const stream = currentStream?.id === result.id ? currentStream : await getStream(result.id)
+      setCurrentStream(stream)
+
+      const audio = stream.audioStreams?.find(s => s.url)
+      const video = stream.videoStreams?.find(s => s.url && !s.videoOnly)
+      const playable = audio ?? video
+
+      if (!playable?.url) return
+
+      setDownloading(result.id)
+      try {
+        await startDownload(
+          result.id, result.title, result.uploader,
+          result.thumbnail, result.duration,
+          playable.url, playable.label, 'audio'
+        )
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setDownloading(null)
+      }
     } catch (e) {
       console.error(e)
-    } finally {
-      setDownloading(null)
     }
   }, [currentStream])
 
-  const handleAddToQueue = useCallback((result: YouTubeSearchResult) => {
-    addToQueue({
-      id: result.id, title: result.title, uploader: result.uploader,
-      thumbnail: result.thumbnail, duration: result.duration,
-    })
-  }, [addToQueue])
+  const displayItems = isSearching ? searchResults : trending
+  const listEmpty = isSearching
+    ? 'No results found'
+    : (trendingLoading ? 'Loading...' : 'Nothing to show')
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -146,28 +138,45 @@ export default function MusicScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 }}>
-        <Text style={{ color: theme.text, fontSize: 26, fontWeight: '800', marginBottom: 12 }}>
-          ♪ Music
-        </Text>
-        <SearchBar
-          value={searchQuery}
-          onChange={setSearchQuery}
-          onSubmit={handleSearch}
-          placeholder="Search songs..."
-        />
-      </View>
+      <Header
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSearchSubmit={handleSearch}
+        searchPlaceholder="Search songs..."
+        onSettingsPress={() => navigation.navigate('Settings')}
+      />
+
+      {(isSearching || searchQuery.length > 0) && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
+          <TouchableOpacity onPress={clearSearch} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="arrow-back" size={18} color={theme.accent} />
+            <Text style={{ color: theme.accent, marginLeft: 6, fontSize: 13, fontWeight: '600' }}>
+              Back to trending
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={searchResults}
+          data={displayItems}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 }}
+          ListHeaderComponent={
+            !isSearching && !trendingLoading && trending.length > 0 ? (
+              <Text style={{
+                color: theme.textSecondary, fontSize: 13, fontWeight: '600',
+                marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
+              }}>
+                Popular Songs
+              </Text>
+            ) : null
+          }
           ListEmptyComponent={
             <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 60 }}>
-              Search for songs to start
+              {listEmpty}
             </Text>
           }
           renderItem={({ item }) => (
@@ -180,7 +189,7 @@ export default function MusicScreen() {
             >
               <Image
                 source={{ uri: item.thumbnail }}
-                style={{ width: 52, height: 52, borderRadius: 8, backgroundColor: theme.bgElevated }}
+                style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: theme.bgElevated }}
               />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
@@ -190,7 +199,10 @@ export default function MusicScreen() {
                   {item.uploader}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => handleAddToQueue(item)} style={{ marginHorizontal: 6 }}>
+              <TouchableOpacity onPress={() => addToQueue({
+                id: item.id, title: item.title, uploader: item.uploader,
+                thumbnail: item.thumbnail, duration: item.duration,
+              })} style={{ marginHorizontal: 6 }}>
                 <Ionicons name="add-circle-outline" size={22} color={theme.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => handleDownload(item)} disabled={downloading === item.id}>
@@ -205,12 +217,12 @@ export default function MusicScreen() {
         />
       )}
 
-      {/* Mini player with progress + lyrics */}
+      {/* Mini player */}
       {currentStream && (
         <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
           backgroundColor: theme.bgElevated, borderTopWidth: 1, borderTopColor: theme.border,
         }}>
-          {/* Progress bar */}
           <View style={{ height: 3, backgroundColor: theme.border }}>
             <View style={{
               height: '100%', width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%',
@@ -235,7 +247,6 @@ export default function MusicScreen() {
               </Text>
             </View>
 
-            {/* Play/pause */}
             <TouchableOpacity
               onPress={() => audioPlayer.toggle()}
               style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.accent, justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}
@@ -259,7 +270,8 @@ export default function MusicScreen() {
       <QualityPicker
         visible={showQuality}
         title="Audio Quality"
-        options={currentStream?.audioStreams ?? []}
+        options={currentStream?.audioStreams?.length ? currentStream.audioStreams
+          : currentStream?.videoStreams?.filter(s => !s.videoOnly) ?? []}
         onSelect={(q) => { setSelectedQuality(q); setShowQuality(false) }}
         onClose={() => setShowQuality(false)}
       />

@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
 import { getDownloads, removeDownload } from '../services/database'
 import type { DownloadedItem } from '../types'
-import { theme } from '../theme'
+import Header from '../components/Header'
+import { useTheme } from '../theme/ThemeProvider'
 import * as FileSystem from 'expo-file-system'
 
-export default function OfflineScreen() {
+export default function OfflineScreen({ navigation }: any) {
+  const { theme } = useTheme()
   const { downloadedItems, setDownloadedItems } = useStore()
   const [filter, setFilter] = useState<'all' | 'audio' | 'video'>('all')
 
@@ -41,38 +43,32 @@ export default function OfflineScreen() {
     ])
   }, [])
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(0)} KB`
-    return `${(bytes / 1_000_000).toFixed(1)} MB`
-  }
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 }}>
-        <Text style={{ color: theme.text, fontSize: 26, fontWeight: '800', marginBottom: 12 }}>
-          ▼ Offline
-        </Text>
+      <Header
+        subtitle="Your library"
+        onSettingsPress={() => navigation.navigate('Settings')}
+      />
 
-        <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-          {(['all', 'audio', 'video'] as const).map((f) => (
-            <TouchableOpacity
-              key={f}
-              onPress={() => setFilter(f)}
-              style={{
-                paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20,
-                backgroundColor: filter === f ? theme.accent : theme.bgCard,
-                marginRight: 8,
-              }}
-            >
-              <Text style={{
-                color: filter === f ? '#fff' : theme.textSecondary,
-                fontWeight: '600', fontSize: 13, textTransform: 'capitalize',
-              }}>
-                {f}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 12 }}>
+        {(['all', 'audio', 'video'] as const).map((f) => (
+          <TouchableOpacity
+            key={f}
+            onPress={() => setFilter(f)}
+            style={{
+              paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20,
+              backgroundColor: filter === f ? theme.accent : theme.bgCard,
+              marginRight: 8,
+            }}
+          >
+            <Text style={{
+              color: filter === f ? '#fff' : theme.textSecondary,
+              fontWeight: '600', fontSize: 13, textTransform: 'capitalize',
+            }}>
+              {f}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <FlatList

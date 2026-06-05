@@ -1,15 +1,15 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
-import { search, getStream } from '../services/youtube'
+import { search, getStream, getTrending } from '../services/youtube'
 import type { YouTubeSearchResult } from '../types'
-import SearchBar from '../components/SearchBar'
+import Header from '../components/Header'
 import QualityPicker from '../components/QualityPicker'
 import { useTheme } from '../theme/ThemeProvider'
 import { VideoView, useVideoPlayer } from 'expo-video'
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: any) {
   const { theme } = useTheme()
   const { searchQuery, setSearchQuery, searchResults, setSearchResults,
     setCurrentStream, currentStream, selectedQuality, setSelectedQuality,
@@ -18,23 +18,28 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
   const [showControls, setShowControls] = useState(false)
-  const [isPipActive, setIsPipActive] = useState(false)
-  const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [trending, setTrending] = useState<YouTubeSearchResult[]>([])
+  const [trendingLoading, setTrendingLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
 
   const player = useVideoPlayer(selectedQuality?.url ?? null, (p) => {
     p.staysActiveInBackground = true
-    p.play()
   })
 
-  const toggleControls = () => {
-    setShowControls(true)
-    if (controlsTimer.current) clearTimeout(controlsTimer.current)
-    controlsTimer.current = setTimeout(() => setShowControls(false), 4000)
-  }
+  useEffect(() => {
+    getTrending().then((items) => {
+      setTrending(items)
+      setTrendingLoading(false)
+    })
+  }, [])
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return
+    if (!searchQuery.trim()) {
+      setIsSearching(false)
+      return
+    }
     setLoading(true)
+    setIsSearching(true)
     try {
       const results = await search(searchQuery.trim())
       setSearchResults(results)
@@ -45,42 +50,52 @@ export default function HomeScreen() {
     }
   }, [searchQuery])
 
+  const clearSearch = useCallback(() => {
+    setSearchQuery('')
+    setSearchResults([])
+    setIsSearching(false)
+  }, [])
+
   const handlePlay = useCallback(async (result: YouTubeSearchResult) => {
     try {
       const stream = await getStream(result.id)
       setCurrentStream(stream)
-      const video = stream.videoStreams.find(s => s.url) ?? stream.videoStreams[0]
+      const video = stream.videoStreams.find(s => s.url && !s.label.includes('LBRY'))
+        ?? stream.videoStreams.find(s => s.url)
       if (video) setSelectedQuality(video)
-      setShowControls(false)
-      setIsPipActive(false)
     } catch (e) {
       console.error(e)
     }
   }, [])
 
-  const handleAddToQueue = useCallback((result: YouTubeSearchResult) => {
-    addToQueue({
-      id: result.id, title: result.title, uploader: result.uploader,
-      thumbnail: result.thumbnail, duration: result.duration,
-    })
-  }, [addToQueue])
+  const displayItems = isSearching ? searchResults : trending
+  const listEmpty = isSearching
+    ? 'No results found'
+    : (trendingLoading ? 'Loading...' : 'Nothing to show')
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 }}>
-        <Text style={{ color: theme.text, fontSize: 26, fontWeight: '800', marginBottom: 12 }}>
-          ▶ Normal
-        </Text>
-        <SearchBar
-          value={searchQuery}
-          onChange={setSearchQuery}
-          onSubmit={handleSearch}
-          placeholder="Search videos..."
-        />
-      </View>
+      <Header
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSearchSubmit={handleSearch}
+        searchPlaceholder="Search videos..."
+        onSettingsPress={() => navigation.navigate('Settings')}
+      />
+
+      {(isSearching || searchQuery.length > 0) && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
+          <TouchableOpacity onPress={clearSearch} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="arrow-back" size={18} color={theme.accent} />
+            <Text style={{ color: theme.accent, marginLeft: 6, fontSize: 13, fontWeight: '600' }}>
+              Back to trending
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {currentStream && selectedQuality?.url ? (
-        <TouchableOpacity activeOpacity={1} onPress={toggleControls} style={{ height: 240, backgroundColor: '#000' }}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(true)} style={{ height: 240, backgroundColor: '#000' }}>
           <VideoView
             player={player}
             style={{ flex: 1 }}
@@ -88,49 +103,6 @@ export default function HomeScreen() {
             allowsPictureInPicture
             contentFit="contain"
           />
-
-          {isPipActive && (
-            <View style={{
-              position: 'absolute', top: 8, left: 8,
-              backgroundColor: theme.accent, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2,
-            }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>PiP</Text>
-            </View>
-          )}
-
-          {showControls && (
-            <View style={{
-              ...StyleSheet.absoluteFillObject,
-              justifyContent: 'center', alignItems: 'center',
-              backgroundColor: 'rgba(0,0,0,0.4)',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 40 }}>
-                <TouchableOpacity>
-                  <Ionicons name="play-skip-back" size={28} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => { player.playing ? player.pause() : player.play() }}
-                  style={{
-                    width: 56, height: 56, borderRadius: 28,
-                    backgroundColor: theme.accent, justifyContent: 'center', alignItems: 'center',
-                  }}
-                >
-                  <Ionicons name={player.playing ? 'pause' : 'play'} size={28} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity>
-                  <Ionicons name="play-skip-forward" size={28} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowQuality(true)}
-                style={{ position: 'absolute', bottom: 12, right: 12 }}
-              >
-                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '600' }}>
-                  {selectedQuality?.label ?? 'Quality'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </TouchableOpacity>
       ) : null}
 
@@ -138,12 +110,22 @@ export default function HomeScreen() {
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={searchResults}
+          data={displayItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+          ListHeaderComponent={
+            !isSearching && !trendingLoading && trending.length > 0 ? (
+              <Text style={{
+                color: theme.textSecondary, fontSize: 13, fontWeight: '600',
+                marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
+              }}>
+                Trending Now
+              </Text>
+            ) : null
+          }
           ListEmptyComponent={
             <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 60 }}>
-              Search for videos to start
+              {listEmpty}
             </Text>
           }
           renderItem={({ item }) => (
@@ -166,7 +148,10 @@ export default function HomeScreen() {
                   {item.uploader}
                 </Text>
                 <View style={{ flexDirection: 'row', marginTop: 6 }}>
-                  <TouchableOpacity onPress={() => handleAddToQueue(item)}>
+                  <TouchableOpacity onPress={() => addToQueue({
+                    id: item.id, title: item.title, uploader: item.uploader,
+                    thumbnail: item.thumbnail, duration: item.duration,
+                  })}>
                     <Ionicons name="add-circle-outline" size={20} color={theme.accent} />
                   </TouchableOpacity>
                 </View>
