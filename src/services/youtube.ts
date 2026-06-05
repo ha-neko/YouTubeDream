@@ -44,18 +44,29 @@ export async function getTrending(): Promise<YouTubeSearchResult[]> {
   }
 }
 
-export async function search(query: string): Promise<YouTubeSearchResult[]> {
+export async function search(
+  query: string,
+  nextpage?: string
+): Promise<{ results: YouTubeSearchResult[]; nextpage: string | null }> {
   const params = new URLSearchParams({ q: query, filter: 'videos' })
+  if (nextpage) params.set('nextpage', nextpage)
   const res = await fetch(apiUrl(`/search?${params}`))
   if (!res.ok) throw new Error(`Search failed: ${res.status}`)
   const data = await res.json()
-  return (data.items ?? []).map(resultFromItem).filter(Boolean) as YouTubeSearchResult[]
+  return {
+    results: (data.items ?? []).map(resultFromItem).filter(Boolean) as YouTubeSearchResult[],
+    nextpage: data.nextpage ?? null,
+  }
 }
 
 export async function getStream(videoId: string): Promise<YouTubeStream> {
   const res = await fetch(apiUrl(`/streams/${videoId}`))
   if (!res.ok) throw new Error(`Stream fetch failed: ${res.status}`)
   const data = await res.json()
+
+  if (data.error) {
+    throw new Error(data.message ?? data.error ?? 'Stream not available')
+  }
 
   const videoStreams: StreamQuality[] = (data.videoStreams ?? []).map((s: any) => ({
     label: s.quality && !s.quality.includes('LBRY')
@@ -96,8 +107,11 @@ export function getPlayableStream(stream: YouTubeStream): { url: string; label: 
   const audio = stream.audioStreams?.find(s => s.url)
   if (audio?.url) return { url: audio.url, label: audio.label }
 
-  const videoWithAudio = stream.videoStreams?.find(s => s.url && !s.videoOnly)
-  if (videoWithAudio?.url) return { url: videoWithAudio.url, label: videoWithAudio.label + ' (audio)' }
+  const proxiedVideo = stream.videoStreams?.find(s => s.url && s.url.includes('proxy.piped') && !s.videoOnly)
+  if (proxiedVideo?.url) return { url: proxiedVideo.url, label: proxiedVideo.label + ' (audio)' }
+
+  const nonLbryVideo = stream.videoStreams?.find(s => s.url && !s.label.includes('LBRY') && !s.videoOnly)
+  if (nonLbryVideo?.url) return { url: nonLbryVideo.url, label: nonLbryVideo.label + ' (audio)' }
 
   const anyVideo = stream.videoStreams?.find(s => s.url)
   if (anyVideo?.url) return { url: anyVideo.url, label: anyVideo.label }

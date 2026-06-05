@@ -19,6 +19,7 @@ export default function MusicScreen({ navigation }: any) {
     addToQueue, showingLyrics, setShowingLyrics } = useStore()
 
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [currentTime, setCurrentTime] = useState(0)
@@ -28,6 +29,9 @@ export default function MusicScreen({ navigation }: any) {
   const [trending, setTrending] = useState<YouTubeSearchResult[]>([])
   const [trendingLoading, setTrendingLoading] = useState(true)
   const [isSearching, setIsSearching] = useState(false)
+  const [playError, setPlayError] = useState<string | null>(null)
+  const nextPageRef = useRef<string | null>(null)
+  const queryRef = useRef('')
   const posUnsub = useRef<(() => void) | null>(null)
   const statusUnsub = useRef<(() => void) | null>(null)
 
@@ -54,35 +58,56 @@ export default function MusicScreen({ navigation }: any) {
     }
     setLoading(true)
     setIsSearching(true)
+    setPlayError(null)
+    queryRef.current = searchQuery.trim()
     try {
-      const results = await search(searchQuery.trim())
+      const { results, nextpage } = await search(searchQuery.trim())
       setSearchResults(results)
-    } catch (e) {
+      nextPageRef.current = nextpage
+    } catch (e: any) {
       console.error(e)
     } finally {
       setLoading(false)
     }
   }, [searchQuery])
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !nextPageRef.current || !queryRef.current) return
+    setLoadingMore(true)
+    try {
+      const { results, nextpage } = await search(queryRef.current, nextPageRef.current)
+      const prev = useStore.getState().searchResults
+      setSearchResults([...prev, ...results])
+      nextPageRef.current = nextpage
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore])
+
   const clearSearch = useCallback(() => {
     setSearchQuery('')
     setSearchResults([])
     setIsSearching(false)
+    nextPageRef.current = null
+    queryRef.current = ''
+    setPlayError(null)
   }, [])
 
   const handlePlay = useCallback(async (result: YouTubeSearchResult) => {
+    setPlayError(null)
     try {
       const stream = await getStream(result.id)
       setCurrentStream(stream)
 
       const playable = getPlayableStream(stream)
-      if (!playable?.url) return
+      if (!playable?.url) {
+        setPlayError('No playable stream found')
+        return
+      }
 
-      setSelectedQuality({
-        label: playable.label,
-        url: playable.url,
-      })
-
+      setSelectedQuality({ label: playable.label, url: playable.url })
       await audioPlayer.loadAndPlay(playable.url)
 
       const found = await searchLyrics(result.title, result.uploader, result.duration)
@@ -92,21 +117,23 @@ export default function MusicScreen({ navigation }: any) {
       } else {
         setLyrics([])
       }
-    } catch (e) {
+    } catch (e: any) {
+      setPlayError(e?.message ?? 'Failed to play')
       console.error(e)
     }
   }, [])
 
   const handleDownload = useCallback(async (result: YouTubeSearchResult) => {
+    setPlayError(null)
     try {
       const stream = currentStream?.id === result.id ? currentStream : await getStream(result.id)
       setCurrentStream(stream)
 
-      const audio = stream.audioStreams?.find(s => s.url)
-      const video = stream.videoStreams?.find(s => s.url && !s.videoOnly)
-      const playable = audio ?? video
-
-      if (!playable?.url) return
+      const playable = getPlayableStream(stream)
+      if (!playable?.url) {
+        setPlayError('No stream available for download')
+        return
+      }
 
       setDownloading(result.id)
       try {
@@ -120,7 +147,8 @@ export default function MusicScreen({ navigation }: any) {
       } finally {
         setDownloading(null)
       }
-    } catch (e) {
+    } catch (e: any) {
+      setPlayError(e?.message ?? 'Download failed')
       console.error(e)
     }
   }, [currentStream])
@@ -157,6 +185,12 @@ export default function MusicScreen({ navigation }: any) {
         </View>
       )}
 
+      {playError && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(255,80,80,0.15)' }}>
+          <Text style={{ color: '#ff6666', fontSize: 12 }}>{playError}</Text>
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
       ) : (
@@ -164,6 +198,8 @@ export default function MusicScreen({ navigation }: any) {
           data={displayItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 }}
+          onEndReached={isSearching ? loadMore : undefined}
+          onEndReachedThreshold={0.5}
           ListHeaderComponent={
             !isSearching && !trendingLoading && trending.length > 0 ? (
               <Text style={{
@@ -172,6 +208,11 @@ export default function MusicScreen({ navigation }: any) {
               }}>
                 Popular Songs
               </Text>
+            ) : null
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator size="small" color={theme.accent} style={{ paddingVertical: 12 }} />
             ) : null
           }
           ListEmptyComponent={

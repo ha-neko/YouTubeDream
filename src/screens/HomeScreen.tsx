@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
-import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet } from 'react-native'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { View, FlatList, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store/useStore'
 import { search, getStream, getTrending } from '../services/youtube'
@@ -16,15 +16,26 @@ export default function HomeScreen({ navigation }: any) {
     addToQueue } = useStore()
 
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
-  const [showControls, setShowControls] = useState(false)
   const [trending, setTrending] = useState<YouTubeSearchResult[]>([])
   const [trendingLoading, setTrendingLoading] = useState(true)
   const [isSearching, setIsSearching] = useState(false)
+  const [playError, setPlayError] = useState<string | null>(null)
+  const nextPageRef = useRef<string | null>(null)
+  const queryRef = useRef('')
 
-  const player = useVideoPlayer(selectedQuality?.url ?? null, (p) => {
+  const player = useVideoPlayer(null, (p) => {
     p.staysActiveInBackground = true
   })
+
+  useEffect(() => {
+    if (selectedQuality?.url && player) {
+      player.replace(selectedQuality.url)
+      player.play()
+      setPlayError(null)
+    }
+  }, [selectedQuality?.url])
 
   useEffect(() => {
     getTrending().then((items) => {
@@ -40,30 +51,59 @@ export default function HomeScreen({ navigation }: any) {
     }
     setLoading(true)
     setIsSearching(true)
+    setPlayError(null)
+    queryRef.current = searchQuery.trim()
     try {
-      const results = await search(searchQuery.trim())
+      const { results, nextpage } = await search(searchQuery.trim())
       setSearchResults(results)
-    } catch (e) {
+      nextPageRef.current = nextpage
+    } catch (e: any) {
       console.error(e)
+      setPlayError(e?.message ?? 'Search failed')
     } finally {
       setLoading(false)
     }
   }, [searchQuery])
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !nextPageRef.current || !queryRef.current) return
+    setLoadingMore(true)
+    try {
+      const { results, nextpage } = await search(queryRef.current, nextPageRef.current)
+      const prev = useStore.getState().searchResults
+      setSearchResults([...prev, ...results])
+      nextPageRef.current = nextpage
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore])
+
   const clearSearch = useCallback(() => {
     setSearchQuery('')
     setSearchResults([])
     setIsSearching(false)
+    nextPageRef.current = null
+    queryRef.current = ''
+    setPlayError(null)
   }, [])
 
   const handlePlay = useCallback(async (result: YouTubeSearchResult) => {
+    setPlayError(null)
     try {
       const stream = await getStream(result.id)
       setCurrentStream(stream)
-      const video = stream.videoStreams.find(s => s.url && !s.label.includes('LBRY'))
+      const video = stream.videoStreams.find(s => s.url && s.url.includes('proxy.piped'))
+        ?? stream.videoStreams.find(s => s.url && !s.label.includes('LBRY'))
         ?? stream.videoStreams.find(s => s.url)
-      if (video) setSelectedQuality(video)
-    } catch (e) {
+      if (video) {
+        setSelectedQuality(video)
+      } else {
+        setPlayError('No playable stream found')
+      }
+    } catch (e: any) {
+      setPlayError(e?.message ?? 'Failed to load video')
       console.error(e)
     }
   }, [])
@@ -95,16 +135,22 @@ export default function HomeScreen({ navigation }: any) {
       )}
 
       {currentStream && selectedQuality?.url ? (
-        <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(true)} style={{ height: 240, backgroundColor: '#000' }}>
+        <TouchableOpacity activeOpacity={1} style={{ height: 240, backgroundColor: '#000' }}>
           <VideoView
             player={player}
             style={{ flex: 1 }}
-            nativeControls={showControls}
+            nativeControls
             allowsPictureInPicture
             contentFit="contain"
           />
         </TouchableOpacity>
       ) : null}
+
+      {playError && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(255,80,80,0.15)' }}>
+          <Text style={{ color: '#ff6666', fontSize: 12 }}>{playError}</Text>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
@@ -113,6 +159,8 @@ export default function HomeScreen({ navigation }: any) {
           data={displayItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+          onEndReached={isSearching ? loadMore : undefined}
+          onEndReachedThreshold={0.5}
           ListHeaderComponent={
             !isSearching && !trendingLoading && trending.length > 0 ? (
               <Text style={{
@@ -121,6 +169,11 @@ export default function HomeScreen({ navigation }: any) {
               }}>
                 Trending Now
               </Text>
+            ) : null
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator size="small" color={theme.accent} style={{ paddingVertical: 12 }} />
             ) : null
           }
           ListEmptyComponent={
