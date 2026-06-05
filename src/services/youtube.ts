@@ -2,12 +2,14 @@ import { Platform } from 'react-native'
 import type { YouTubeSearchResult, YouTubeStream, StreamQuality } from '../types'
 
 const PIPED_API = 'https://api.piped.private.coffee'
+const CORS_PROXY = 'https://api.codetabs.com/v1/proxy?quest='
 
-// On web, proxy through Metro dev server (handled in metro.config.js) to avoid CORS
+// On web, use CORS proxy (browsers block cross-origin requests)
 const isWeb = Platform.OS === 'web'
 
 function apiUrl(path: string): string {
-  return isWeb ? `/api/piped${path}` : `${PIPED_API}${path}`
+  const url = `${PIPED_API}${path}`
+  return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
 }
 
 export async function search(query: string): Promise<YouTubeSearchResult[]> {
