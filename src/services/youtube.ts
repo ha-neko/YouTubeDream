@@ -1,14 +1,21 @@
+import { Platform } from 'react-native'
 import type { YouTubeSearchResult, YouTubeStream, StreamQuality } from '../types'
 
-// Using Piped API (privacy-respecting YouTube frontend, free, no auth)
 const PIPED_API = 'https://pipedapi.kavin.rocks'
 
+// Free public CORS proxy for web (browsers block cross-origin)
+const CORS_PROXY = 'https://api.allorigins.win/raw?url='
+
+const isWeb = Platform.OS === 'web'
+
+function apiUrl(path: string): string {
+  const url = `${PIPED_API}${path}`
+  return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
+}
+
 export async function search(query: string): Promise<YouTubeSearchResult[]> {
-  const params = new URLSearchParams({
-    q: query,
-    filter: 'videos',
-  })
-  const res = await fetch(`${PIPED_API}/search?${params}`)
+  const params = new URLSearchParams({ q: query, filter: 'videos' })
+  const res = await fetch(apiUrl(`/search?${params}`))
   if (!res.ok) throw new Error(`Search failed: ${res.status}`)
   const data = await res.json()
 
@@ -24,7 +31,7 @@ export async function search(query: string): Promise<YouTubeSearchResult[]> {
 }
 
 export async function getStream(videoId: string): Promise<YouTubeStream> {
-  const res = await fetch(`${PIPED_API}/streams/${videoId}`)
+  const res = await fetch(apiUrl(`/streams/${videoId}`))
   if (!res.ok) throw new Error(`Stream fetch failed: ${res.status}`)
   const data = await res.json()
 
@@ -63,7 +70,7 @@ export async function getStream(videoId: string): Promise<YouTubeStream> {
 export async function getAutocomplete(query: string): Promise<string[]> {
   try {
     const params = new URLSearchParams({ query })
-    const res = await fetch(`${PIPED_API}/opensearch/suggestions?${params}`)
+    const res = await fetch(apiUrl(`/opensearch/suggestions?${params}`))
     if (!res.ok) return []
     return await res.json()
   } catch {
