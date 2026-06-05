@@ -1,4 +1,4 @@
-import { View, Text, TextInput, TouchableOpacity } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../theme/ThemeProvider'
 
@@ -24,14 +24,10 @@ export default function Header({
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 54, paddingBottom: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: subtitle ? 2 : 10 }}>
-        <View style={{
-          width: 36, height: 36, borderRadius: 10,
-          backgroundColor: theme.accent,
-          justifyContent: 'center', alignItems: 'center',
-          marginRight: 10,
-        }}>
-          <Text style={{ fontSize: 18, lineHeight: 20 }}>⚈ ‿ ⚈</Text>
-        </View>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={{ width: 34, height: 34, borderRadius: 9, marginRight: 10, backgroundColor: theme.bgElevated }}
+        />
         <Text style={{
           color: theme.text, fontSize: 22, fontWeight: '800',
           letterSpacing: -0.5,

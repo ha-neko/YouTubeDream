@@ -11,20 +11,34 @@ function apiUrl(path: string): string {
   return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
 }
 
+function fixThumbnail(url: string, videoId: string): string {
+  if (url.includes('proxy.piped') || url.includes('i.ytimg.com')) {
+    return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  }
+  return url
+}
+
+function resultFromItem(item: any): YouTubeSearchResult | null {
+  const id = item.url?.split('watch?v=')?.[1] ?? item.url ?? ''
+  if (!id) return null
+  return {
+    id,
+    title: item.title ?? 'Untitled',
+    thumbnail: fixThumbnail(item.thumbnail ?? item.thumbnailUrl ?? '', id),
+    duration: item.duration ?? 0,
+    uploader: item.uploader ?? item.uploaderName ?? 'Unknown',
+    uploaderAvatar: item.uploaderAvatar ?? '',
+    views: item.views ?? 0,
+  }
+}
+
 export async function getTrending(): Promise<YouTubeSearchResult[]> {
   try {
     const res = await fetch(apiUrl('/trending?region=US'))
     if (!res.ok) return []
     const data = await res.json()
-    return (Array.isArray(data) ? data : data.items ?? []).map((item: any) => ({
-      id: item.url?.split('watch?v=')?.[1] ?? item.url ?? '',
-      title: item.title ?? 'Untitled',
-      thumbnail: item.thumbnail ?? item.thumbnailUrl ?? '',
-      duration: item.duration ?? 0,
-      uploader: item.uploader ?? item.uploaderName ?? 'Unknown',
-      uploaderAvatar: item.uploaderAvatar ?? '',
-      views: item.views ?? 0,
-    })).filter((r: YouTubeSearchResult) => r.id)
+    const items = Array.isArray(data) ? data : data.items ?? []
+    return items.map(resultFromItem).filter(Boolean) as YouTubeSearchResult[]
   } catch {
     return []
   }
@@ -35,16 +49,7 @@ export async function search(query: string): Promise<YouTubeSearchResult[]> {
   const res = await fetch(apiUrl(`/search?${params}`))
   if (!res.ok) throw new Error(`Search failed: ${res.status}`)
   const data = await res.json()
-
-  return (data.items ?? []).map((item: any) => ({
-    id: item.url?.split('watch?v=')?.[1] ?? item.url ?? '',
-    title: item.title ?? 'Untitled',
-    thumbnail: item.thumbnail ?? '',
-    duration: item.duration ?? 0,
-    uploader: item.uploader ?? 'Unknown',
-    uploaderAvatar: item.uploaderAvatar ?? '',
-    views: item.views ?? 0,
-  })).filter((r: YouTubeSearchResult) => r.id)
+  return (data.items ?? []).map(resultFromItem).filter(Boolean) as YouTubeSearchResult[]
 }
 
 export async function getStream(videoId: string): Promise<YouTubeStream> {
