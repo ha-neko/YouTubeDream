@@ -14,21 +14,12 @@ const PIPED_INSTANCES = [
   'https://pipedapi.owo.si',
   'https://pipedapi.ducks.party',
   'https://pipedapi.reallyaweso.me',
-  'https://api.piped.private.coffee',
   'https://pipedapi.darkness.services',
   'https://pipedapi.orangenet.cc',
 ]
 
-const CORS_PROXY = 'https://api.codetabs.com/v1/proxy?quest='
-const isWeb = Platform.OS === 'web'
-
-function apiUrl(instance: string, path: string): string {
-  const url = `${instance}${path}`
-  return isWeb ? `${CORS_PROXY}${encodeURIComponent(url)}` : url
-}
-
 function fixThumbnail(url: string, videoId: string): string {
-  if (url.includes('proxy.piped') || url.includes('i.ytimg.com') || url.includes('ytimg.com')) {
+  if (url.includes('proxy.piped') || url.includes('ytimg.com')) {
     return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
   }
   return url
@@ -51,13 +42,13 @@ function resultFromItem(item: any): YouTubeSearchResult | null {
 async function fetchFromInstances<T>(path: string, extract: (data: any) => T): Promise<T> {
   for (const instance of PIPED_INSTANCES) {
     try {
-      const res = await fetch(apiUrl(instance, path), { signal: AbortSignal.timeout(8000) })
+      const res = await fetch(`${instance}${path}`, { signal: AbortSignal.timeout(10000) })
       if (!res.ok) continue
       const data = await res.json()
       if (data && !data.error) return extract(data)
     } catch { }
   }
-  throw new Error('All instances failed')
+  throw new Error('All Piped instances failed. Try again later.')
 }
 
 export async function getTrending(): Promise<YouTubeSearchResult[]> {
@@ -142,7 +133,7 @@ export async function getAutocomplete(query: string): Promise<string[]> {
   for (const instance of PIPED_INSTANCES) {
     try {
       const params = new URLSearchParams({ query })
-      const res = await fetch(apiUrl(instance, `/opensearch/suggestions?${params}`), { signal: AbortSignal.timeout(5000) })
+      const res = await fetch(`${instance}/opensearch/suggestions?${params}`, { signal: AbortSignal.timeout(5000) })
       if (!res.ok) continue
       return await res.json()
     } catch { }
